@@ -14,3 +14,10 @@ _book
 *.epub
 *.mobi
 *.pdf
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+*.joblib
