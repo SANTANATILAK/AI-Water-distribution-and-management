@@ -1,37 +1,23 @@
-# AI-Water-distribution-and-management
+AI-Based Water Distribution & Demand Forecasting
 
-The project aims to improve water distribution systems by using AI to address issues such as wastage, leakage, and energy consumption and swapping the water where it is needed.
+A predictive system that models water demand and helps optimize distribution to reduce wastage, leakage, and unnecessary energy consumption.
 
-Below is a simple demo included in this repository which trains a linear regression model
-on sample data to predict water demand from temperature and population.
+Problem
 
-## Getting Started
+Municipal and local water systems often over- or under-supply water because demand isn't predicted accurately, leading to wastage, leakage, and higher energy costs from pumping.
 
-1. Create a virtual environment and install dependencies:
+Approach
+Built a regression-based forecasting model on 400+ data points of historical demand
+Designed a feature engineering pipeline to capture usage patterns relevant to demand prediction
+Modeled where water is needed most so distribution can be shifted accordingly, reducing waste
+Built evaluation dashboards to visualize model accuracy and demand trends
+Tech Stack
 
-```sh
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+Python, Scikit-Learn, Pandas, NumPy
 
-2. Train a model using the sample data:
-
-```sh
-python water_demand.py train --data data/sample.csv --model model.joblib
-```
-
-3. Make a single prediction:
-
-```sh
-python water_demand.py predict --temp 30 --pop 1200 --model model.joblib
-```
-
-4. Batch predictions from CSV:
-
-```sh
-python water_demand.py batch-predict --input data/sample.csv --output results.csv --model model.joblib
-```
-
-The sample CSV is provided under `data/sample.csv`. Feel free to replace it with your own data.
-
+Results
+Forecasting pipeline built end-to-end from raw data to evaluation dashboard
+Identified clear demand patterns usable for redistribution decisions
+What I'd Improve Next
+Incorporate real-time sensor/IoT data for live demand tracking
+Test additional model families (e.g., time-series specific models) against the current regression baseline
