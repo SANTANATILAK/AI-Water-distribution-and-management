@@ -1,123 +1,126 @@
-#!/usr/bin/env python3
-"""water_demand.py
-
-Train and use a simple linear regression model to predict water demand
-based on temperature and population.
-
-Usage examples:
-    # train a model from a CSV file and save to disk
-    ./water_demand.py train --data data/sample.csv --model model.joblib
-
-    # make a single prediction
-    ./water_demand.py predict --temp 30 --pop 1200 --model model.joblib
-
-    # batch prediction from a CSV with Temperature and Population columns
-    ./water_demand.py batch-predict --input data/to_predict.csv \
-        --output results.csv --model model.joblib
-
-The CSVs are expected to have headers matching the column names.
-"""
-
-import argparse
-import sys
+import streamlit as st
+import csv
 from pathlib import Path
 
-import joblib
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import LinearRegression
+st.set_page_config(page_title="AquaAI", page_icon="💧", layout="wide")
 
-MODEL_DEFAULT = "model.joblib"
-
-
-def load_data(path: Path) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    return df
-
-
-def train_model(data_path: Path) -> LinearRegression:
-    df = load_data(data_path)
-    required = ["Temperature", "Population", "Water_Demand"]
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        raise ValueError(f"Data file missing columns: {missing}")
-    X = df[["Temperature", "Population"]]
-    y = df["Water_Demand"]
-    model = LinearRegression()
-    model.fit(X, y)
-    return model
+DATA = [
+    {"Temperature": 30.0, "Population": 1000.0, "Water_Demand": 500.0},
+    {"Temperature": 32.0, "Population": 1200.0, "Water_Demand": 600.0},
+    {"Temperature": 35.0, "Population": 1500.0, "Water_Demand": 750.0},
+    {"Temperature": 28.0, "Population": 900.0, "Water_Demand": 450.0},
+    {"Temperature": 25.0, "Population": 800.0, "Water_Demand": 400.0},
+    {"Temperature": 33.0, "Population": 1300.0, "Water_Demand": 680.0},
+    {"Temperature": 31.0, "Population": 1100.0, "Water_Demand": 550.0},
+]
 
 
-def predict_single(model: LinearRegression, temp: float, pop: float) -> float:
-    return model.predict([[temp, pop]])[0]
+def load_data():
+    path = Path(__file__).parent / "data" / "sample.csv"
+    try:
+        with open(path, newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        data = []
+        for row in rows:
+            data.append({
+                "Temperature": float(row["Temperature"]),
+                "Population": float(row["Population"]),
+                "Water_Demand": float(row["Water_Demand"]),
+            })
+        return data if len(data) >= 2 else DATA
+    except Exception:
+        return DATA
 
 
-def predict_batch(model: LinearRegression, input_path: Path) -> pd.DataFrame:
-    df = load_data(input_path)
-    if "Temperature" not in df.columns or "Population" not in df.columns:
-        raise ValueError("Input file must contain Temperature and Population columns")
-    preds = model.predict(df[["Temperature", "Population"]])
-    df_out = df.copy()
-    df_out["Predicted_Water_Demand"] = preds
-    return df_out
+def fit_regression(rows):
+    n = len(rows)
+    sx = sum(r["Temperature"] for r in rows)
+    sz = sum(r["Population"] for r in rows)
+    sy = sum(r["Water_Demand"] for r in rows)
+    sxx = sum(r["Temperature"] ** 2 for r in rows)
+    szz = sum(r["Population"] ** 2 for r in rows)
+    sxz = sum(r["Temperature"] * r["Population"] for r in rows)
+    sxy = sum(r["Temperature"] * r["Water_Demand"] for r in rows)
+    szy = sum(r["Population"] * r["Water_Demand"] for r in rows)
+    a = [[n, sx, sz], [sx, sxx, sxz], [sz, sxz, szz]]
+    b = [sy, sxy, szy]
+    for i in range(3):
+        p = max(range(i, 3), key=lambda j: abs(a[j][i]))
+        a[i], a[p] = a[p], a[i]
+        b[i], b[p] = b[p], b[i]
+        pivot = a[i][i]
+        if abs(pivot) < 1e-12:
+            return 0.0, 0.0, sy / n
+        for j in range(i, 3):
+            a[i][j] /= pivot
+        b[i] /= pivot
+        for k in range(3):
+            if k == i:
+                continue
+            factor = a[k][i]
+            for j in range(i, 3):
+                a[k][j] -= factor * a[i][j]
+            b[k] -= factor * b[i]
+    return b[1], b[2], b[0]
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Water demand prediction CLI")
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    # train subcommand
-    tparser = sub.add_parser("train", help="train a model from data")
-    tparser.add_argument("--data", "-d", type=Path, required=True,
-                         help="CSV file with training data")
-    tparser.add_argument("--model", "-m", type=Path, default=MODEL_DEFAULT,
-                         help="where to save the trained model")
-
-    # predict subcommand
-    pp = sub.add_parser("predict", help="make a single prediction")
-    pp.add_argument("--temp", type=float, required=True,
-                    help="temperature value")
-    pp.add_argument("--pop", type=float, required=True,
-                    help="population value")
-    pp.add_argument("--model", "-m", type=Path, default=MODEL_DEFAULT,
-                    help="path to a saved model")
-
-    # batch predict
-    bp = sub.add_parser("batch-predict", help="predict from CSV file")
-    bp.add_argument("--input", "-i", type=Path, required=True,
-                    help="CSV file with rows to predict")
-    bp.add_argument("--output", "-o", type=Path, required=True,
-                    help="path to write output CSV")
-    bp.add_argument("--model", "-m", type=Path, default=MODEL_DEFAULT,
-                    help="path to a saved model")
-
-    args = parser.parse_args()
-
-    if args.cmd == "train":
-        model = train_model(args.data)
-        joblib.dump(model, args.model)
-        print(f"Model trained and saved to {args.model}")
-
-    elif args.cmd == "predict":
-        if not args.model.exists():
-            print(f"Model file {args.model} not found", file=sys.stderr)
-            sys.exit(1)
-        model = joblib.load(args.model)
-        if args.temp < 0 or args.pop < 0:
-            print("Error: values must be non-negative", file=sys.stderr)
-            sys.exit(1)
-        val = predict_single(model, args.temp, args.pop)
-        print(f"Predicted Water Demand: {val:.2f} liters")
-
-    elif args.cmd == "batch-predict":
-        if not args.model.exists():
-            print(f"Model file {args.model} not found", file=sys.stderr)
-            sys.exit(1)
-        model = joblib.load(args.model)
-        df_out = predict_batch(model, args.input)
-        df_out.to_csv(args.output, index=False)
-        print(f"Batch prediction complete, results written to {args.output}")
+rows = load_data()
+temp_coef, pop_coef, intercept = fit_regression(rows)
 
 
-if __name__ == "__main__":
-    main()
+def predict(temp, population):
+    return max(0.0, intercept + temp_coef * temp + pop_coef * population)
+
+
+st.markdown("""
+<style>
+.stApp { background: #071923; }
+.hero { padding: 28px; border-radius: 18px; background: #0b2b3a; border: 1px solid #1d5368; margin-bottom: 20px; }
+.card { padding: 18px; border-radius: 14px; background: #0b2633; border: 1px solid #1d5368; }
+.big { font-size: 28px; font-weight: 700; }
+</style>
+""", unsafe_allow_html=True)
+
+with st.sidebar:
+    st.title("💧 AquaAI")
+    page = st.radio("Navigation", ["Dashboard", "Predict Demand", "Data Explorer", "About"])
+    st.divider()
+    st.write("AI Water Distribution & Management")
+    st.write("Records:", len(rows))
+
+st.markdown("<div class='hero'><h1>💧 Smart Water Distribution</h1><p>AI-powered water demand prediction and management.</p></div>", unsafe_allow_html=True)
+
+if page == "Dashboard":
+    average = sum(r["Water_Demand"] for r in rows) / len(rows)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Records", len(rows))
+    c2.metric("Average Demand", f"{average:,.1f} L")
+    c3.metric("Model", "Linear Regression")
+    st.subheader("Water Demand Overview")
+    chart_data = {"Water Demand": [r["Water_Demand"] for r in rows]}
+    st.line_chart(chart_data)
+    st.subheader("Dataset")
+    st.dataframe(rows, use_container_width=True)
+
+elif page == "Predict Demand":
+    st.subheader("💧 Predict Water Demand")
+    temperature = st.number_input("Temperature (°C)", min_value=0.0, max_value=60.0, value=30.0, step=0.5)
+    population = st.number_input("Population", min_value=1.0, max_value=10000000.0, value=1000.0, step=100.0)
+    if st.button("Predict Water Demand", type="primary", use_container_width=True):
+        result = predict(temperature, population)
+        st.success("Prediction completed successfully")
+        st.metric("Estimated Daily Water Demand", f"{result:,.2f} L")
+
+elif page == "Data Explorer":
+    st.subheader("📊 Data Explorer")
+    st.dataframe(rows, use_container_width=True)
+    st.subheader("Water Demand")
+    st.bar_chart({"Water Demand": [r["Water_Demand"] for r in rows]})
+
+else:
+    st.subheader("About AquaAI")
+    st.write("AquaAI demonstrates AI-based water demand prediction using temperature and population data.")
+    st.write("Technology: Python and Streamlit")
+    st.write("Model: Linear Regression")
+
+st.caption("AquaAI • AI Water Distribution & Management")
