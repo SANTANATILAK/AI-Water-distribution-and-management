@@ -1,10 +1,11 @@
-import streamlit as st
 import csv
 from pathlib import Path
 
+import streamlit as st
+
 st.set_page_config(page_title="AquaAI", page_icon="💧", layout="wide")
 
-DATA = [
+DEFAULT_DATA = [
     {"Temperature": 30.0, "Population": 1000.0, "Water_Demand": 500.0},
     {"Temperature": 32.0, "Population": 1200.0, "Water_Demand": 600.0},
     {"Temperature": 35.0, "Population": 1500.0, "Water_Demand": 750.0},
@@ -14,24 +15,22 @@ DATA = [
     {"Temperature": 31.0, "Population": 1100.0, "Water_Demand": 550.0},
 ]
 
-@st.cache_data
+
 def load_data():
     path = Path(__file__).parent / "data" / "sample.csv"
-    if not path.exists():
-        return DATA
     try:
-        with open(path, newline="", encoding="utf-8") as f:
-            rows = list(csv.DictReader(f))
-        result = []
+        with path.open(newline="", encoding="utf-8") as file:
+            rows = list(csv.DictReader(file))
+        data = []
         for row in rows:
-            result.append({
+            data.append({
                 "Temperature": float(row["Temperature"]),
                 "Population": float(row["Population"]),
                 "Water_Demand": float(row["Water_Demand"]),
             })
-        return result if len(result) >= 2 else DATA
+        return data if len(data) >= 2 else DEFAULT_DATA
     except Exception:
-        return DATA
+        return DEFAULT_DATA
 
 
 def regression(rows):
@@ -46,10 +45,11 @@ def regression(rows):
     szy = sum(r["Population"] * r["Water_Demand"] for r in rows)
     a = [[n, sx, sz], [sx, sxx, sxz], [sz, sxz, szz]]
     b = [sy, sxy, szy]
+
     for i in range(3):
-        p = max(range(i, 3), key=lambda j: abs(a[j][i]))
-        a[i], a[p] = a[p], a[i]
-        b[i], b[p] = b[p], b[i]
+        pivot_row = max(range(i, 3), key=lambda j: abs(a[j][i]))
+        a[i], a[pivot_row] = a[pivot_row], a[i]
+        b[i], b[pivot_row] = b[pivot_row], b[i]
         pivot = a[i][i]
         if abs(pivot) < 1e-12:
             return 0.0, 0.0, sy / n
@@ -63,20 +63,23 @@ def regression(rows):
             for j in range(i, 3):
                 a[k][j] -= factor * a[i][j]
             b[k] -= factor * b[i]
+
     return b[1], b[2], b[0]
+
 
 rows = load_data()
 temp_coef, pop_coef, intercept = regression(rows)
 
-def predict(temp, pop):
-    return max(0.0, intercept + temp_coef * temp + pop_coef * pop)
+
+def predict(temperature, population):
+    value = intercept + temp_coef * temperature + pop_coef * population
+    return max(0.0, value)
+
 
 st.markdown("""
 <style>
 .stApp { background: #071923; }
-.hero { padding: 30px; border-radius: 18px; background: #0b2b3a; border: 1px solid #1d5368; margin-bottom: 24px; }
-.card { padding: 18px; border-radius: 14px; background: #0b2633; border: 1px solid #1d5368; }
-.big { font-size: 30px; font-weight: 700; }
+.hero { padding: 28px; border-radius: 18px; background: #0b2b3a; border: 1px solid #1d5368; margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -87,19 +90,21 @@ with st.sidebar:
     st.write("AI Water Distribution & Management")
     st.write("Records:", len(rows))
 
-st.markdown("<div class='hero'><h1>💧 Smart Water Distribution</h1><p>AI-powered water demand prediction and management.</p></div>", unsafe_allow_html=True)
+st.markdown(
+    "<div class='hero'><h1>💧 Smart Water Distribution</h1><p>AI-powered water demand prediction and management.</p></div>",
+    unsafe_allow_html=True,
+)
 
 if page == "Dashboard":
-    avg = sum(r["Water_Demand"] for r in rows) / len(rows)
+    average = sum(r["Water_Demand"] for r in rows) / len(rows)
     c1, c2, c3 = st.columns(3)
-    c1.markdown(f"<div class='card'>Records<br><span class='big'>{len(rows):,}</span></div>", unsafe_allow_html=True)
-    c2.markdown(f"<div class='card'>Average Demand<br><span class='big'>{avg:,.1f} L</span></div>", unsafe_allow_html=True)
-    c3.markdown("<div class='card'>Model<br><span class='big'>Linear Regression</span></div>", unsafe_allow_html=True)
+    c1.metric("Records", len(rows))
+    c2.metric("Average Demand", f"{average:,.1f} L")
+    c3.metric("Model", "Linear Regression")
     st.subheader("Water Demand Overview")
-    chart = {"Temperature": [r["Temperature"] for r in rows], "Water Demand": [r["Water_Demand"] for r in rows]}
-    st.line_chart(chart, x="Temperature")
+    st.line_chart({"Water Demand": [r["Water_Demand"] for r in rows]})
     st.subheader("Dataset")
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, use_container_width=True)
 
 elif page == "Predict Demand":
     st.subheader("💧 Predict Water Demand")
@@ -112,15 +117,15 @@ elif page == "Predict Demand":
 
 elif page == "Data Explorer":
     st.subheader("📊 Data Explorer")
-    st.dataframe(rows, use_container_width=True, hide_index=True)
-    st.subheader("Water Demand by Temperature")
-    st.bar_chart({"Water Demand": [r["Water_Demand"] for r in sorted(rows, key=lambda x: x["Temperature"])]})
+    st.dataframe(rows, use_container_width=True)
+    st.subheader("Water Demand")
+    st.bar_chart({"Water Demand": [r["Water_Demand"] for r in rows]})
 
 else:
     st.subheader("About AquaAI")
     st.write("AquaAI demonstrates AI-based water demand prediction using temperature and population data.")
     st.write("Technology: Python and Streamlit")
     st.write("Model: Linear Regression")
-    st.write("The application uses the project sample dataset and includes a safe fallback dataset.")
+    st.write("The app includes a fallback dataset, so it remains functional if the CSV is unavailable.")
 
 st.caption("AquaAI • AI Water Distribution & Management")
