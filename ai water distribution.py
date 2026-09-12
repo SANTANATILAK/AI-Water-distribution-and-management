@@ -14,15 +14,16 @@ DATA = [
 
 st.title("💧 AquaAI - Smart Water Distribution")
 st.write("AI-powered water demand prediction and management")
+st.success("AquaAI application loaded successfully")
 
 page = st.sidebar.radio("Navigation", ["Dashboard", "Predict Demand", "Data", "About"])
 
 if page == "Dashboard":
-    avg = sum(x["Water Demand"] for x in DATA) / len(DATA)
+    avg = sum(row["Water Demand"] for row in DATA) / len(DATA)
     a, b, c = st.columns(3)
     a.metric("Records", len(DATA))
     b.metric("Average Demand", f"{avg:.1f} L")
-    c.metric("Model", "Linear Regression")
+    c.metric("Model", "Water Demand Predictor")
     st.subheader("Water Demand Data")
     st.dataframe(DATA, use_container_width=True, hide_index=True)
 
@@ -38,7 +39,7 @@ elif page == "Predict Demand":
 elif page == "Data":
     st.subheader("📊 Dataset")
     st.dataframe(DATA, use_container_width=True, hide_index=True)
-    st.bar_chart({"Water Demand": [x["Water Demand"] for x in DATA]})
+    st.bar_chart({"Water Demand": [row["Water Demand"] for row in DATA]})
 
 else:
     st.subheader("About AquaAI")
@@ -46,4 +47,4 @@ else:
     st.write("Technology: Python and Streamlit")
     st.write("The application predicts daily water demand using temperature and population.")
 
-st.caption("AquaAI • AI Water Distribution & Management")
+st.caption("AquaAI • AI Water Distribution & Management • v2.0")
