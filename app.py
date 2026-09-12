@@ -1,128 +1,126 @@
 import streamlit as st
-import pandas as pd
+import csv
 from pathlib import Path
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score, mean_absolute_error
 
-st.set_page_config(page_title="AquaAI - Water Management", page_icon="💧", layout="wide")
+st.set_page_config(page_title="AquaAI", page_icon="💧", layout="wide")
+
+DATA = [
+    {"Temperature": 30.0, "Population": 1000.0, "Water_Demand": 500.0},
+    {"Temperature": 32.0, "Population": 1200.0, "Water_Demand": 600.0},
+    {"Temperature": 35.0, "Population": 1500.0, "Water_Demand": 750.0},
+    {"Temperature": 28.0, "Population": 900.0, "Water_Demand": 450.0},
+    {"Temperature": 25.0, "Population": 800.0, "Water_Demand": 400.0},
+    {"Temperature": 33.0, "Population": 1300.0, "Water_Demand": 680.0},
+    {"Temperature": 31.0, "Population": 1100.0, "Water_Demand": 550.0},
+]
+
+@st.cache_data
+def load_data():
+    path = Path(__file__).parent / "data" / "sample.csv"
+    if not path.exists():
+        return DATA
+    try:
+        with open(path, newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        result = []
+        for row in rows:
+            result.append({
+                "Temperature": float(row["Temperature"]),
+                "Population": float(row["Population"]),
+                "Water_Demand": float(row["Water_Demand"]),
+            })
+        return result if len(result) >= 2 else DATA
+    except Exception:
+        return DATA
+
+
+def regression(rows):
+    n = len(rows)
+    sx = sum(r["Temperature"] for r in rows)
+    sz = sum(r["Population"] for r in rows)
+    sy = sum(r["Water_Demand"] for r in rows)
+    sxx = sum(r["Temperature"] ** 2 for r in rows)
+    szz = sum(r["Population"] ** 2 for r in rows)
+    sxz = sum(r["Temperature"] * r["Population"] for r in rows)
+    sxy = sum(r["Temperature"] * r["Water_Demand"] for r in rows)
+    szy = sum(r["Population"] * r["Water_Demand"] for r in rows)
+    a = [[n, sx, sz], [sx, sxx, sxz], [sz, sxz, szz]]
+    b = [sy, sxy, szy]
+    for i in range(3):
+        p = max(range(i, 3), key=lambda j: abs(a[j][i]))
+        a[i], a[p] = a[p], a[i]
+        b[i], b[p] = b[p], b[i]
+        pivot = a[i][i]
+        if abs(pivot) < 1e-12:
+            return 0.0, 0.0, sy / n
+        for j in range(i, 3):
+            a[i][j] /= pivot
+        b[i] /= pivot
+        for k in range(3):
+            if k == i:
+                continue
+            factor = a[k][i]
+            for j in range(i, 3):
+                a[k][j] -= factor * a[i][j]
+            b[k] -= factor * b[i]
+    return b[1], b[2], b[0]
+
+rows = load_data()
+temp_coef, pop_coef, intercept = regression(rows)
+
+def predict(temp, pop):
+    return max(0.0, intercept + temp_coef * temp + pop_coef * pop)
 
 st.markdown("""
 <style>
-.stApp { background: #071923; color: #f5fbff; }
-.block-container { padding-top: 2rem; }
-.hero { padding: 28px; border-radius: 18px; background: #0b2b3a; border: 1px solid #1d5368; margin-bottom: 24px; }
-.hero h1 { margin: 0; font-size: 38px; }
-.hero p { color: #b4ced8; }
+.stApp { background: #071923; }
+.hero { padding: 30px; border-radius: 18px; background: #0b2b3a; border: 1px solid #1d5368; margin-bottom: 24px; }
 .card { padding: 18px; border-radius: 14px; background: #0b2633; border: 1px solid #1d5368; }
-.value { font-size: 28px; font-weight: 700; }
-.label { color: #8fb4c3; font-size: 13px; text-transform: uppercase; }
-.result { padding: 25px; border-radius: 16px; background: #0b3547; border: 1px solid #2a91b5; text-align: center; }
-.result-value { font-size: 42px; font-weight: 700; color: #58dcff; }
+.big { font-size: 30px; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
-DATA_PATH = Path(__file__).parent / "data" / "sample.csv"
-DEFAULT_DATA = pd.DataFrame({
-    "Temperature": [30, 32, 35, 28, 25, 33, 31],
-    "Population": [1000, 1200, 1500, 900, 800, 1300, 1100],
-    "Water_Demand": [500, 600, 750, 450, 400, 680, 550]
-})
-
-
-def load_data():
-    try:
-        if DATA_PATH.exists():
-            data = pd.read_csv(DATA_PATH)
-            required = ["Temperature", "Population", "Water_Demand"]
-            if all(column in data.columns for column in required):
-                data = data[required].copy()
-                for column in required:
-                    data[column] = pd.to_numeric(data[column], errors="coerce")
-                data = data.dropna().reset_index(drop=True)
-                if len(data) >= 2:
-                    return data
-    except Exception:
-        pass
-    return DEFAULT_DATA.copy()
-
-
-def build_model(data):
-    model = LinearRegression()
-    X = data[["Temperature", "Population"]]
-    y = data["Water_Demand"]
-    model.fit(X, y)
-    prediction = model.predict(X)
-    return model, r2_score(y, prediction), mean_absolute_error(y, prediction)
-
-try:
-    df = load_data()
-    model, r2, mae = build_model(df)
-except Exception as error:
-    st.error("The application could not start.")
-    st.exception(error)
-    st.stop()
-
 with st.sidebar:
     st.title("💧 AquaAI")
-    st.caption("AI Water Distribution & Management")
     page = st.radio("Navigation", ["Dashboard", "Predict Demand", "Data Explorer", "About"])
     st.divider()
-    st.write("**Model:** Linear Regression")
-    st.write("**Records:**", len(df))
+    st.write("AI Water Distribution & Management")
+    st.write("Records:", len(rows))
 
-st.markdown("""
-<div class="hero">
-<h1>💧 Smart Water Distribution</h1>
-<p>AI-powered water demand prediction using temperature and population.</p>
-</div>
-""", unsafe_allow_html=True)
+st.markdown("<div class='hero'><h1>💧 Smart Water Distribution</h1><p>AI-powered water demand prediction and management.</p></div>", unsafe_allow_html=True)
 
 if page == "Dashboard":
-    c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(f'<div class="card"><div class="label">Records</div><div class="value">{len(df):,}</div></div>', unsafe_allow_html=True)
-    c2.markdown(f'<div class="card"><div class="label">Average Demand</div><div class="value">{df["Water_Demand"].mean():,.1f} L</div></div>', unsafe_allow_html=True)
-    c3.markdown(f'<div class="card"><div class="label">R² Score</div><div class="value">{r2:.3f}</div></div>', unsafe_allow_html=True)
-    c4.markdown(f'<div class="card"><div class="label">MAE</div><div class="value">{mae:.2f} L</div></div>', unsafe_allow_html=True)
+    avg = sum(r["Water_Demand"] for r in rows) / len(rows)
+    c1, c2, c3 = st.columns(3)
+    c1.markdown(f"<div class='card'>Records<br><span class='big'>{len(rows):,}</span></div>", unsafe_allow_html=True)
+    c2.markdown(f"<div class='card'>Average Demand<br><span class='big'>{avg:,.1f} L</span></div>", unsafe_allow_html=True)
+    c3.markdown("<div class='card'>Model<br><span class='big'>Linear Regression</span></div>", unsafe_allow_html=True)
     st.subheader("Water Demand Overview")
-    chart = df[["Temperature", "Water_Demand"]].sort_values("Temperature").set_index("Temperature")
-    st.line_chart(chart)
+    chart = {"Temperature": [r["Temperature"] for r in rows], "Water Demand": [r["Water_Demand"] for r in rows]}
+    st.line_chart(chart, x="Temperature")
     st.subheader("Dataset")
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(rows, use_container_width=True, hide_index=True)
 
 elif page == "Predict Demand":
     st.subheader("💧 Predict Water Demand")
-    left, right = st.columns(2)
-    with left:
-        temperature = st.number_input("Temperature (°C)", 0.0, 60.0, 30.0, 0.5)
-        population = st.number_input("Population", 1.0, 10000000.0, 1000.0, 100.0)
-        predict = st.button("Predict Water Demand", type="primary", use_container_width=True)
-    with right:
-        if predict:
-            input_df = pd.DataFrame({"Temperature": [temperature], "Population": [population]})
-            result = max(0.0, float(model.predict(input_df)[0]))
-            st.markdown(f'<div class="result"><div>ESTIMATED WATER DEMAND</div><div class="result-value">{result:,.2f} L</div><div>per day</div></div>', unsafe_allow_html=True)
-        else:
-            st.info("Enter temperature and population, then click Predict Water Demand.")
-    st.subheader("Model Performance")
-    a, b = st.columns(2)
-    a.metric("R² Score", f"{r2:.3f}")
-    b.metric("Mean Absolute Error", f"{mae:.2f} L")
+    temperature = st.number_input("Temperature (°C)", min_value=0.0, max_value=60.0, value=30.0, step=0.5)
+    population = st.number_input("Population", min_value=1.0, max_value=10000000.0, value=1000.0, step=100.0)
+    if st.button("Predict Water Demand", type="primary", use_container_width=True):
+        result = predict(temperature, population)
+        st.success("Prediction completed successfully")
+        st.metric("Estimated Daily Water Demand", f"{result:,.2f} L")
 
 elif page == "Data Explorer":
     st.subheader("📊 Data Explorer")
-    st.dataframe(df, use_container_width=True, hide_index=True)
-    st.subheader("Statistics")
-    st.dataframe(df.describe().round(2), use_container_width=True)
-    st.subheader("Demand by Temperature")
-    chart = df[["Temperature", "Water_Demand"]].sort_values("Temperature").set_index("Temperature")
-    st.bar_chart(chart)
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.subheader("Water Demand by Temperature")
+    st.bar_chart({"Water Demand": [r["Water_Demand"] for r in sorted(rows, key=lambda x: x["Temperature"])]})
 
 else:
     st.subheader("About AquaAI")
-    st.write("AquaAI demonstrates how machine learning can support water resource planning by estimating water demand from temperature and population.")
-    st.markdown("**Technology:** Python, Streamlit, Pandas, Scikit-learn")
-    st.markdown("**Model:** Linear Regression")
-    st.markdown("**Inputs:** Temperature and Population")
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.write("AquaAI demonstrates AI-based water demand prediction using temperature and population data.")
+    st.write("Technology: Python and Streamlit")
+    st.write("Model: Linear Regression")
+    st.write("The application uses the project sample dataset and includes a safe fallback dataset.")
 
 st.caption("AquaAI • AI Water Distribution & Management")
