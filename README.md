@@ -1,7 +1,5 @@
 # AI-Based Water Distribution & Demand Forecasting
 
-🔗 **Live Demo:** [https://cuddly-telegram-7vrqxwrpvr46fxgq9-8503.app.github.dev/](https://cuddly-telegram-7vrqxwrpvr46fxgq9-8503.app.github.dev/)
-
 A system that predicts how much water a city or town will need, so supply can be
 managed more efficiently — cutting down on wastage, leaks, and the extra energy
 spent pumping water that wasn't actually needed.
